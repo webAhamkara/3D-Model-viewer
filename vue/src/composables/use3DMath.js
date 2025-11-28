@@ -1,29 +1,40 @@
 export function barycentricCoordinates(x, y, x0, y0, x1, y1, x2, y2) {
-	const lambda0 =
-		((x - x2) * (y1 - y2) - (x1 - x2) * (y - y2)) /
-		((x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2))
-	const lambda1 =
-		((x0 - x2) * (y - y2) - (x - x2) * (y0 - y2)) /
-		((x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2))
+	const denominator = (x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2)
+	if (Math.abs(denominator) < 1e-10) return null
+	const lambda0 = ((x - x2) * (y1 - y2) - (x1 - x2) * (y - y2)) / denominator
+
+	const lambda1 = ((x0 - x2) * (y - y2) - (x - x2) * (y0 - y2)) / denominator
 	const lambda2 = 1.0 - lambda0 - lambda1
+	if (lambda0 < -0.005 || lambda1 < -0.005 || lambda2 < -0.005) return null
 	return { lambda0, lambda1, lambda2 }
 }
 
 export function vertexRendering(
 	zBuffer,
-	ctx,
+	canvasWidth,
+	canvasHeight,
 	x0,
 	y0,
 	z0,
+	I0,
+	u0,
+	v0,
 	x1,
 	y1,
 	z1,
+	I1,
+	u1,
+	v1,
 	x2,
 	y2,
 	z2,
-	color = `rgba(0, 0, 0, 1)`,
-	canvasWidth,
-	canvasHeight
+	I2,
+	u2,
+	v2,
+	color = { r: 0, g: 0, b: 0 },
+	texture = undefined,
+	pixels = undefined,
+	data
 ) {
 	if (Math.abs((x0 - x2) * (y1 - y2) - (x1 - x2) * (y0 - y2)) < 0.0000000001) {
 		return
@@ -32,7 +43,6 @@ export function vertexRendering(
 	const xmax = Math.min(canvasWidth, Math.ceil(Math.max(x0, x1, x2)) + 4)
 	const ymin = Math.max(0, Math.floor(Math.min(y0, y1, y2)) - 4)
 	const ymax = Math.min(canvasHeight, Math.ceil(Math.max(y0, y1, y2)) + 4)
-	const visiblePixels = []
 	for (let countX = xmin; countX <= xmax; countX++) {
 		for (let countY = ymin; countY <= ymax; countY++) {
 			const result = barycentricCoordinates(
@@ -51,30 +61,52 @@ export function vertexRendering(
 				result.lambda1 >= -0.005 &&
 				result.lambda2 >= -0.005
 			) {
+				const pixelIndex = countY * canvasWidth + countX
+				const dataIndex = pixelIndex * 4
+				let I = -(
+					result.lambda0 * I0 +
+					result.lambda1 * I1 +
+					result.lambda2 * I2
+				)
+				I = Math.max(0, Math.min(1, I))
+				let r, g, b
+				if (texture && pixels) {
+					let textureX = Math.round(
+						(texture.width - 1) *
+							(result.lambda0 * u0 + result.lambda1 * u1 + result.lambda2 * u2)
+					)
+					let textureY = Math.round(
+						(texture.height - 1) *
+							(result.lambda0 * v0 + result.lambda1 * v1 + result.lambda2 * v2)
+					)
+
+					const textureColor = getPixelColor(
+						textureX,
+						textureY,
+						pixels,
+						texture.width
+					)
+					r = Math.min(255, Math.floor(textureColor.r * I))
+					g = Math.min(255, Math.floor(textureColor.g * I))
+					b = Math.min(255, Math.floor(textureColor.b * I))
+				} else {
+					r = Math.min(255, Math.floor(color.r * I))
+					g = Math.min(255, Math.floor(color.g * I))
+					b = Math.min(255, Math.floor(color.b * I))
+				}
+
 				const z =
 					result.lambda0 * z0 + result.lambda1 * z1 + result.lambda2 * z2
-				if (z < zBuffer[countX][countY]) {
-					visiblePixels.push({ x: countX, y: countY, z: z })
+				if (z < zBuffer[pixelIndex]) {
+					zBuffer[pixelIndex] = z
+					data[dataIndex] = r
+					data[dataIndex + 1] = g
+					data[dataIndex + 2] = b
+					data[dataIndex + 3] = 255
 				}
 			}
 		}
 	}
-	if (visiblePixels.length > 0) {
-		ctx.fillStyle = color
-		visiblePixels.forEach(pixel => {
-			ctx.fillRect(pixel.x, pixel.y, 1, 1)
-		})
-		visiblePixels.forEach(pixel => {
-			zBuffer[pixel.x][pixel.y] = pixel.z
-		})
-	}
-}
-export function randomColor(cos, modelColor) {
-	const lightIntensity = 0.3 + (cos + 1) * 0.7
-	const r = Math.round(modelColor.r * lightIntensity)
-	const g = Math.round(modelColor.g * lightIntensity)
-	const b = Math.round(modelColor.b * lightIntensity)
-	return `rgb(${r}, ${g}, ${b})`
 }
 
 export function calculatingTheNormal(x0, y0, z0, x1, y1, z1, x2, y2, z2) {
@@ -141,4 +173,56 @@ export function rotate(x, y, z, alpha = 0, beta = 0, gamma = 0) {
 	const yNew = Rxyz[1][0] * x + Rxyz[1][1] * y + Rxyz[1][2] * z
 	const zNew = Rxyz[2][0] * x + Rxyz[2][1] * y + Rxyz[2][2] * z
 	return { x: xNew, y: yNew, z: zNew }
+}
+function getPixelColor(x, y, pixels, width) {
+	const index = (y * width + x) * 4
+	return {
+		r: pixels[index],
+		g: pixels[index + 1],
+		b: pixels[index + 2],
+	}
+}
+
+export function calculatingAutoScale(vertices, canvasWidth, canvasHeight) {
+	if (vertices.length === 0) return null
+
+	let minX = Infinity,
+		maxX = -Infinity
+	let minY = Infinity,
+		maxY = -Infinity
+	let minZ = Infinity,
+		maxZ = -Infinity
+
+	for (const v of vertices) {
+		minX = Math.min(minX, v.x)
+		maxX = Math.max(maxX, v.x)
+		minY = Math.min(minY, v.y)
+		maxY = Math.max(maxY, v.y)
+		minZ = Math.min(minZ, v.z)
+		maxZ = Math.max(maxZ, v.z)
+	}
+
+	const centerX = (minX + maxX) / 2
+	const centerY = (minY + maxY) / 2
+	const centerZ = (minZ + maxZ) / 2
+
+	const sizeX = maxX - minX
+	const sizeY = maxY - minY
+	const sizeZ = maxZ - minZ
+
+	const maxDimension = Math.max(sizeX, sizeY, sizeZ)
+
+	const distance = maxDimension * 2.5
+
+	const minCanvasDimension = Math.min(canvasWidth, canvasHeight)
+	const scale = (minCanvasDimension * 0.8) / maxDimension
+
+	const perspectiveScale = distance * scale
+
+	return {
+		scaleX: perspectiveScale,
+		scaleY: perspectiveScale,
+		distance: distance,
+		center: { x: centerX, y: centerY, z: centerZ },
+	}
 }

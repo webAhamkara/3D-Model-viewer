@@ -2,4 +2,10 @@ body {
 	overflow-y: hidden;
 	font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
 	font-size: 26px;
+	background-image: linear-gradient(
+			rgba(128, 128, 128, 0.2) 2px,
+			transparent 1px
+		),
+		linear-gradient(90deg, rgba(128, 128, 128, 0.2) 1px, transparent 1px);
+	background-size: 32px 32px;
 }

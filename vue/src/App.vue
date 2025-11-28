@@ -5,100 +5,122 @@
 				<h1>3D MODEL VIEWER</h1>
 			</div>
 			<div class="page__canvas">
-				<div
-					class="left-arrow"
-					@mousedown="startContinuousTurn('left')"
-					@mouseup="stopContinuousTurn"
-					@mouseleave="stopContinuousTurn"
-				>
-					<svg
-						width="102"
-						height="83"
-						viewBox="0 0 102 83"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-					>
-						<path
-							fill-rule="evenodd"
-							clip-rule="evenodd"
-							d="M62.8732 0.203188C64.7254 -0.3167 66.7764 0.183389 67.9786 1.44796L100.062 35.1981C101.349 36.5522 101.349 38.4482 100.062 39.8024L67.9782 73.5524C66.7764 74.8172 64.7249 75.3171 62.8728 74.7974C61.0211 74.2772 59.7772 72.8522 59.7772 71.2502V56.2885C35.1244 56.7089 23.2798 60.5369 17.3296 64.6997C11.6734 68.6571 10.6432 73.3086 9.5633 78.1847C9.47099 78.6014 9.37827 79.0199 9.28234 79.4395C8.85715 81.2995 6.80482 82.609 4.49638 82.4931C2.18789 82.3772 0.346677 80.8724 0.202668 78.9839C-0.583048 68.6789 0.59656 53.7464 9.494 41.2529C18.128 29.1291 33.6774 19.8075 59.7772 18.8343V3.7502C59.7772 2.1482 61.0211 0.723126 62.8732 0.203188Z"
-							fill="black"
-						/>
-					</svg>
-				</div>
 				<ModelViewer
-					:rotation-angle="rotationAngle"
+					:rotation-angle-x="rotationAngleX"
+					:rotation-angle-y="rotationAngleY"
 					:model-color="modelColor"
+					:model-scale="modelSize"
+					:file-content="fileContent"
+					:texture-model="textureImage"
+					@auto-scale="functionAutoScale"
 				/>
-				<div
-					class="right-arrow"
-					@mousedown="startContinuousTurn('right')"
-					@mouseup="stopContinuousTurn"
-					@mouseleave="stopContinuousTurn"
-				>
-					<svg
-						width="102"
-						height="83"
-						viewBox="0 0 102 83"
-						fill="none"
-						xmlns="http://www.w3.org/2000/svg"
-					>
-						<path
-							fill-rule="evenodd"
-							clip-rule="evenodd"
-							d="M62.8732 0.203188C64.7254 -0.3167 66.7764 0.183389 67.9786 1.44796L100.062 35.1981C101.349 36.5522 101.349 38.4482 100.062 39.8024L67.9782 73.5524C66.7764 74.8172 64.7249 75.3171 62.8728 74.7974C61.0211 74.2772 59.7772 72.8522 59.7772 71.2502V56.2885C35.1244 56.7089 23.2798 60.5369 17.3296 64.6997C11.6734 68.6571 10.6432 73.3086 9.5633 78.1847C9.47099 78.6014 9.37827 79.0199 9.28234 79.4395C8.85715 81.2995 6.80482 82.609 4.49638 82.4931C2.18789 82.3772 0.346677 80.8724 0.202668 78.9839C-0.583048 68.6789 0.59656 53.7464 9.494 41.2529C18.128 29.1291 33.6774 19.8075 59.7772 18.8343V3.7502C59.7772 2.1482 61.0211 0.723126 62.8732 0.203188Z"
-							fill="black"
-						/>
-					</svg>
-				</div>
 			</div>
-		</div>
-		<div class="page__color-panel">
-			<label
-				>R: <input type="range" min="0" max="255" v-model="modelColor.r"
-			/></label>
-			<label
-				>G: <input type="range" min="0" max="255" v-model="modelColor.g"
-			/></label>
-			<label
-				>B: <input type="range" min="0" max="255" v-model="modelColor.b"
-			/></label>
+			<div
+				class="settings--close"
+				:class="{ 'settings--open': openSettings }"
+				@click="openWindow"
+			>
+				{{ openSettings ? 'Close' : 'Settings' }}
+			</div>
+			<div v-if="openSettings" class="windowSettings" ref="ignoreElement">
+				<ModelSettings
+					@update:color="colorChange"
+					@update:scale="scaleChange"
+					@file-loaded="fileChange"
+					@texture-loaded="textureChange"
+					:parameters-scale="parametersAutoScale"
+				></ModelSettings>
+			</div>
 		</div>
 	</div>
 </template>
 
 <script setup>
 import ModelViewer from './components/ModelViewer.vue'
-import { ref, computed, reactive } from 'vue'
-
+import ModelSettings from './components/ModelSettings.vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 const modelColor = reactive({ r: 128, g: 128, b: 128 })
-const isTurningLeft = ref(false)
-const isTurningRight = ref(false)
-const rotationAngle = ref(3.3)
-let turnInterval = null
-const turnLeft = () => {
-	rotationAngle.value += 0.1
-}
-const turnRight = () => {
-	rotationAngle.value -= 0.1
-}
-const startContinuousTurn = direction => {
-	if (turnInterval) {
-		clearInterval(turnInterval)
-	} else {
-		turnInterval = setInterval(() => {
-			if (direction === 'left') {
-				turnLeft()
-			} else {
-				turnRight()
-			}
-		}, 16)
+const fileContent = ref(null)
+const textureImage = ref(null)
+const modelSize = reactive({ scaleX: 1000, scaleY: 1000, distance: 1 })
+const rotationAngleX = ref(3.3)
+const rotationAngleY = ref(0)
+const openSettings = ref(false)
+const initialCoordinates = reactive({ x: null, y: null })
+const finalCoordinates = reactive({ x: null, y: null })
+const moving = reactive({ x: null, y: null })
+const isChange = ref(false)
+const sensitivity = 0.005
+const parametersAutoScale = reactive({
+	scaleX: 1000,
+	scaleY: 1000,
+	distance: 1,
+})
+const ignoreElement = ref(null)
+onMounted(() => {
+	window.addEventListener('mousedown', start)
+	window.addEventListener('mousemove', movement)
+	window.addEventListener('mouseup', finish)
+})
+onUnmounted(() => {
+	window.removeEventListener('mousedown', start)
+	window.removeEventListener('mousemove', movement)
+	window.removeEventListener('mouseup', finish)
+})
+const start = event => {
+	if (event.button === 0 && !ignoreElement.value?.contains(event.target)) {
+		isChange.value = true
+		initialCoordinates.x = event.clientX
+		initialCoordinates.y = event.clientY
 	}
 }
-const stopContinuousTurn = () => {
-	if (turnInterval) {
-		clearInterval(turnInterval)
-		turnInterval = null
+const movement = event => {
+	if (isChange.value) {
+		finalCoordinates.x = event.clientX
+		finalCoordinates.y = event.clientY
+		moving.x = initialCoordinates.x - finalCoordinates.x
+		moving.y = initialCoordinates.y - finalCoordinates.y
+		rotationAngleX.value = moving.x * sensitivity
+		rotationAngleY.value = -moving.y * sensitivity
+		initialCoordinates.x = event.clientX
+		initialCoordinates.y = event.clientY
+	}
+}
+const finish = () => {
+	isChange.value = false
+}
+const openWindow = () => {
+	if (!openSettings.value) {
+		openSettings.value = true
+	} else {
+		openSettings.value = false
+	}
+}
+const colorChange = newColor => {
+	Object.assign(modelColor, newColor)
+}
+const scaleChange = newScale => {
+	Object.assign(modelSize, newScale)
+}
+const fileChange = newFileContent => {
+	fileContent.value = newFileContent
+	textureImage.value = null
+}
+const textureChange = newTexture => {
+	textureImage.value = newTexture
+}
+const functionAutoScale = autoScale => {
+	if (autoScale) {
+		Object.assign(modelSize, {
+			scaleX: autoScale.scaleX,
+			scaleY: autoScale.scaleY,
+			distance: autoScale.distance,
+		})
+		Object.assign(parametersAutoScale, {
+			scaleX: autoScale.scaleX,
+			scaleY: autoScale.scaleY,
+			distance: autoScale.distance,
+		})
 	}
 }
 </script>
@@ -109,14 +131,24 @@ const stopContinuousTurn = () => {
 	padding: 0;
 	box-sizing: border-box;
 }
-.page {
+html,
+body {
+	overflow-x: hidden;
+	overflow-y: hidden;
 	width: 100%;
+	max-width: 100vw;
+}
+.page {
+	min-width: 320px;
+	max-width: 100%;
 	height: 100vh;
 	position: relative;
 	text-align: center;
 	align-items: center;
 	display: flex;
 	flex-direction: column;
+	overflow-x: hidden;
+	overflow-y: hidden;
 }
 .page__header {
 	user-select: none;
@@ -127,26 +159,63 @@ h1 {
 	color: rgb(82, 128, 151);
 }
 .page__content {
+	position: relative;
 	width: 80%;
 	height: 80%;
+	margin: 0 auto;
 }
 .page__canvas {
+	position: relative;
 	display: flex;
 	flex-direction: row;
 	align-items: center;
+	justify-content: center;
 }
+
 .left-arrow {
-	transform: rotateY(180deg);
+	transform: rotateZ(-90deg);
 }
+.right-arrow {
+	transform: rotateZ(90deg);
+}
+
 .left-arrow:hover,
 .right-arrow:hover {
 	scale: 1.1;
 }
-.page__color-panel {
+.settings--close,
+.settings--open {
+	position: fixed;
 	display: flex;
-	flex-direction: row;
-	gap: 200px;
+	justify-self: center;
+	align-self: center;
+	justify-content: center;
+	align-items: center;
+	bottom: 0;
+	width: 100px;
+	height: 30px;
+	border: 3px solid black;
+	font-size: 16px;
 	user-select: none;
-	color: rgb(63, 98, 116);
+	transition: all 0.5s;
+}
+.settings--close {
+	background-color: rgba(192, 192, 192, 0.428);
+}
+.settings--open {
+	background-color: rgb(234, 82, 82);
+}
+.settings--close:hover,
+.settings--open:hover {
+	scale: 1.1;
+}
+
+.windowSettings {
+	display: flex;
+	justify-self: center;
+	align-self: center;
+	justify-content: center;
+	align-items: center;
+	flex-direction: column;
 }
 </style>
